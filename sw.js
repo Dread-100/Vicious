@@ -1,5 +1,5 @@
 
-const CACHE="vicious-v2";
+const CACHE="vicious-v4";
 const ASSETS=["./","./index.html","./styles.css","./app.js","./manifest.webmanifest","./icon-180.png","./icon-512.png"];
 self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
 self.addEventListener("activate",e=>e.waitUntil(self.clients.claim()));

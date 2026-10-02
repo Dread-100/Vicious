@@ -100,7 +100,19 @@ function mergeDataset(obj){
   const all=loadAll();
   const key=`${clean.day||""}|${clean.venue||""}`;
   const i=all.findIndex(d=>`${d.day||""}|${d.venue||""}`===key);
-  if(i>=0) return 0; // 同じ日付・店舗のデータは二重登録しない
+  if(i>=0){
+    const existing=all[i];
+    const map=new Map((existing.matches||[]).map(m=>[String(m.matchId),m]));
+    let added=0;
+    for(const m of clean.matches){
+      const k=String(m.matchId);
+      if(!map.has(k)){ added++; }
+      map.set(k,{...(map.get(k)||{}),...m});
+    }
+    all[i]={...existing,...clean,matches:[...map.values()]};
+    saveAll(all);
+    return added;
+  }
   all.push(clean);
   saveAll(all);
   return clean.matches.length;
@@ -350,7 +362,7 @@ $("#pasteBtn").onclick=async()=>{
 $("#importBtn").onclick=()=>{
   try{
     const n=importDataset($("#jsonInput").value.trim());
-    $("#importMessage").textContent=n===0?"この日付・店舗のデータは既に登録済みです。":`${n}試合を読み込みました。`;
+    $("#importMessage").textContent=n===0?"新しい試合はありません。":`${n}試合を追加しました。`;
     $("#jsonInput").value="";
     setTimeout(()=>{dlg.close();switchTab("dashboard")},450);
   }catch(e){
@@ -360,3 +372,32 @@ $("#importBtn").onclick=()=>{
 
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
 switchTab("dashboard");
+
+// Bookmarklet handoff: #import=<base64url(JSON)> or #sync
+(function handleBookmarkletHandoff(){
+  const h=location.hash||'';
+  if(h.startsWith('#import=')){
+    try{
+      const s=h.slice(8).replace(/-/g,'+').replace(/_/g,'/');
+      const padded=s+'='.repeat((4-s.length%4)%4);
+      const bin=atob(padded),bytes=new Uint8Array(bin.length);
+      for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+      const raw=new TextDecoder().decode(bytes);
+      const n=importDataset(raw);
+      history.replaceState(null,'',location.pathname+location.search);
+      switchTab('dashboard');
+      setTimeout(()=>alert(n===0?'Vicious: 新しい試合はありません。':`Vicious: ${n}試合を追加しました。`),80);
+      return;
+    }catch(e){
+      history.replaceState(null,'',location.pathname+location.search);
+      openImport();
+      $('#importMessage').textContent='直接取り込みに失敗しました。JSONを貼り付けてください。';
+      return;
+    }
+  }
+  if(h==='#sync'){
+    history.replaceState(null,'',location.pathname+location.search);
+    openImport();
+    $('#importMessage').textContent='同期JSONをクリップボードから貼り付けてください。';
+  }
+})();
