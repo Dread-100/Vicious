@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1014">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Vicious">
+  <title>Vicious</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-180.png">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">EXVS2IB PERFORMANCE LAB</div>
+        <h1>Vicious</h1>
+      </div>
+      <button id="importOpen" class="icon-btn" aria-label="データを同期">＋</button>
+    </header>
+
+    <main>
+      <section id="emptyState" class="empty hidden">
+        <div class="logo-mark">V</div>
+        <h2>戦績を読み込む</h2>
+        <p>Safariの「Vicious同期」で作ったJSONを貼り付けると、端末内だけで分析します。</p>
+        <button class="primary" id="emptyImport">データを読み込む</button>
+      </section>
+
+      <section id="dashboard">
+        <div class="hero-card">
+          <div class="hero-head">
+            <div>
+              <div id="periodLabel" class="muted">—</div>
+              <div class="headline"><span id="matchCount">0</span>戦 <span id="wins">0</span>勝</div>
+            </div>
+            <div class="rate-wrap">
+              <div class="rate" id="winRate">—</div>
+              <div class="muted">WIN RATE</div>
+            </div>
+          </div>
+          <div class="mini-grid">
+            <div><span>平均与ダメ</span><strong id="avgDealt">—</strong></div>
+            <div><span>平均被ダメ</span><strong id="avgTaken">—</strong></div>
+            <div><span>平均覚醒</span><strong id="avgBurst">—</strong></div>
+          </div>
+        </div>
+
+        <section id="missionCard" class="section-card">
+          <div class="section-title-row">
+            <div>
+              <div class="eyebrow">NEXT FOCUS</div>
+              <h2>次の10戦ミッション</h2>
+            </div>
+            <span id="missionStatus" class="pill">候補</span>
+          </div>
+          <div id="missionBody"></div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-title-row">
+            <h2>最近の変化</h2>
+            <span class="muted">直近20戦 vs それ以前</span>
+          </div>
+          <div id="trendCards" class="trend-list"></div>
+        </section>
+
+        <section class="section-card">
+          <div class="section-title-row">
+            <h2>勝敗で差が出ている指標</h2>
+            <span class="muted">相関であり因果ではありません</span>
+          </div>
+          <div id="compareTable"></div>
+        </section>
+      </section>
+
+      <section id="panel-play" class="panel hidden">
+        <div class="section-card">
+          <div class="section-title-row"><h2>立ち回り</h2><span class="muted">勝敗比較</span></div>
+          <div id="playStats"></div>
+        </div>
+      </section>
+
+      <section id="panel-burst" class="panel hidden">
+        <div class="section-card">
+          <div class="section-title-row"><h2>覚醒</h2><span class="muted">使い方を分解</span></div>
+          <div id="burstStats"></div>
+        </div>
+      </section>
+
+      <section id="panel-matchup" class="panel hidden">
+        <div class="section-card">
+          <h2>機体相性</h2>
+          <p class="muted">次の同期版で機体IDを保存すると、相方・相手機体別の勝率をここに出せます。</p>
+        </div>
+      </section>
+
+      <section id="panel-time" class="panel hidden">
+        <div class="section-card">
+          <div class="section-title-row"><h2>時間帯</h2><span class="muted">プレイ開始時刻別</span></div>
+          <div id="timeStats"></div>
+        </div>
+      </section>
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav active" data-tab="dashboard"><span>◉</span><small>総合</small></button>
+      <button class="nav" data-tab="play"><span>↗</span><small>立ち回り</small></button>
+      <button class="nav" data-tab="burst"><span>✦</span><small>覚醒</small></button>
+      <button class="nav" data-tab="matchup"><span>◇</span><small>機体相性</small></button>
+      <button class="nav" data-tab="time"><span>◷</span><small>時間帯</small></button>
+    </nav>
+  </div>
+
+  <dialog id="importDialog">
+    <form method="dialog" class="dialog-card">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow">SYNC DATA</div>
+          <h2>戦績を読み込む</h2>
+        </div>
+        <button value="cancel" class="close-btn">×</button>
+      </div>
+      <p class="muted">Safariショートカットの結果JSONを貼り付けてください。URLや認証情報は保存しません。</p>
+      <textarea id="jsonInput" placeholder='{"schemaVersion":2,...}'></textarea>
+      <div class="dialog-actions">
+        <button type="button" id="pasteBtn" class="secondary">クリップボードから貼る</button>
+        <button type="button" id="importBtn" class="primary">読み込む</button>
+      </div>
+      <div id="importMessage" class="message"></div>
+    </form>
+  </dialog>
+
+  <script src="./app.js"></script>
+</body>
+</html>
