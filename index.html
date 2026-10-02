@@ -4,33 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0b1014">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Vicious">
   <title>Vicious</title>
-  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="manifest" href="./manifest.webmanifest?v=0.5.0">
   <link rel="apple-touch-icon" href="./icon-180.png">
-  <link rel="stylesheet" href="./styles.css">
+  <link rel="stylesheet" href="./styles.css?v=0.5.0">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div>
         <div class="eyebrow">EXVS2IB PERFORMANCE LAB</div>
-        <h1>Vicious</h1>
+        <div class="title-row"><h1>Vicious</h1><span id="versionBadge" class="version-badge">v0.5</span></div>
       </div>
       <button id="importOpen" class="icon-btn" aria-label="データを同期">＋</button>
     </header>
+
+    <div id="updateBanner" class="update-banner hidden">
+      <div><strong>Viciousの更新があります</strong><div id="updateText" class="muted">最新版を読み込みます。</div></div>
+      <button id="updateBtn" class="secondary">更新</button>
+    </div>
 
     <main>
       <section id="emptyState" class="empty hidden">
         <div class="logo-mark">V</div>
         <h2>戦績を読み込む</h2>
-        <p>VSモバイルで「Vicious同期」ブックマークを実行すると、新しい戦績だけ取り込めます。</p>
+        <p>VSモバイルの日別戦績で「Vicious同期」ブックマークを実行すると、新しい試合だけ追加されます。</p>
         <button class="primary" id="emptyImport">データを読み込む</button>
       </section>
 
       <section id="dashboard">
+        <div class="mode-strip" id="modeStrip">
+          <button class="mode-chip active" data-mode="all">全体 <span id="count-all">0</span></button>
+          <button class="mode-chip" data-mode="shuffle">シャッフル <span id="count-shuffle">0</span></button>
+          <button class="mode-chip" data-mode="fixed">固定 <span id="count-fixed">0</span></button>
+          <button class="mode-chip" data-mode="unknown">未判定 <span id="count-unknown">0</span></button>
+        </div>
+        <div id="unknownNotice" class="notice hidden">
+          <div><strong>出撃形式が未判定の戦績があります</strong><div class="muted">自動判定できなかった日だけ手動で直せます。</div></div>
+          <button id="fixUnknownBtn" class="secondary compact">修正</button>
+        </div>
+
         <div class="hero-card">
           <div class="hero-head">
             <div>
@@ -51,59 +65,27 @@
 
         <section id="missionCard" class="section-card">
           <div class="section-title-row">
-            <div>
-              <div class="eyebrow">NEXT FOCUS</div>
-              <h2>次の10戦ミッション</h2>
-            </div>
+            <div><div class="eyebrow">NEXT FOCUS</div><h2>次の10戦ミッション</h2></div>
             <span id="missionStatus" class="pill">候補</span>
           </div>
           <div id="missionBody"></div>
         </section>
 
         <section class="section-card">
-          <div class="section-title-row">
-            <h2>最近の変化</h2>
-            <span class="muted">直近20戦 vs それ以前</span>
-          </div>
+          <div class="section-title-row"><h2>最近の変化</h2><span class="muted">直近20戦 vs それ以前</span></div>
           <div id="trendCards" class="trend-list"></div>
         </section>
 
         <section class="section-card">
-          <div class="section-title-row">
-            <h2>勝敗で差が出ている指標</h2>
-            <span class="muted">相関であり因果ではありません</span>
-          </div>
+          <div class="section-title-row"><h2>勝敗で差が出ている指標</h2><span class="muted">相関であり因果ではありません</span></div>
           <div id="compareTable"></div>
         </section>
       </section>
 
-      <section id="panel-play" class="panel hidden">
-        <div class="section-card">
-          <div class="section-title-row"><h2>立ち回り</h2><span class="muted">勝敗比較</span></div>
-          <div id="playStats"></div>
-        </div>
-      </section>
-
-      <section id="panel-burst" class="panel hidden">
-        <div class="section-card">
-          <div class="section-title-row"><h2>覚醒</h2><span class="muted">使い方を分解</span></div>
-          <div id="burstStats"></div>
-        </div>
-      </section>
-
-      <section id="panel-matchup" class="panel hidden">
-        <div class="section-card">
-          <h2>機体相性</h2>
-          <p class="muted">次の同期版で機体IDを保存すると、相方・相手機体別の勝率をここに出せます。</p>
-        </div>
-      </section>
-
-      <section id="panel-time" class="panel hidden">
-        <div class="section-card">
-          <div class="section-title-row"><h2>時間帯</h2><span class="muted">プレイ開始時刻別</span></div>
-          <div id="timeStats"></div>
-        </div>
-      </section>
+      <section id="panel-play" class="panel hidden"><div class="section-card"><div class="section-title-row"><h2>立ち回り</h2><span class="muted">勝敗比較</span></div><div id="playStats"></div></div></section>
+      <section id="panel-burst" class="panel hidden"><div class="section-card"><div class="section-title-row"><h2>覚醒</h2><span class="muted">試合展開を考慮</span></div><div id="burstStats"></div></div></section>
+      <section id="panel-matchup" class="panel hidden"><div class="section-card"><div class="section-title-row"><h2>機体相性</h2><span class="muted">機体IDベース</span></div><div id="matchupStats"></div></div></section>
+      <section id="panel-time" class="panel hidden"><div class="section-card"><div class="section-title-row"><h2>時間帯</h2><span class="muted">プレイ開始時刻別</span></div><div id="timeStats"></div></div></section>
     </main>
 
     <nav class="bottom-nav">
@@ -118,22 +100,23 @@
   <dialog id="importDialog">
     <form method="dialog" class="dialog-card">
       <div class="dialog-head">
-        <div>
-          <div class="eyebrow">SYNC DATA</div>
-          <h2>戦績を読み込む</h2>
-        </div>
+        <div><div class="eyebrow">DATA</div><h2>戦績データ</h2></div>
         <button value="cancel" class="close-btn">×</button>
       </div>
-      <p class="muted">Vicious同期から直接送るか、同期JSONを貼り付けてください。URLや認証情報は保存しません。</p>
-      <textarea id="jsonInput" placeholder='{"schemaVersion":2,...}'></textarea>
+      <p class="muted">同期JSONの読込・全戦績のバックアップができます。URLや認証情報は保存しません。</p>
+      <textarea id="jsonInput" placeholder='{"schemaVersion":7,...}'></textarea>
       <div class="dialog-actions">
-        <button type="button" id="pasteBtn" class="secondary">クリップボードから貼る</button>
+        <button type="button" id="pasteBtn" class="secondary">貼り付け</button>
         <button type="button" id="importBtn" class="primary">読み込む</button>
+      </div>
+      <div class="dialog-actions second-row">
+        <button type="button" id="exportBtn" class="secondary">全データをコピー</button>
+        <button type="button" id="restoreBtn" class="secondary">旧データを再読込</button>
       </div>
       <div id="importMessage" class="message"></div>
     </form>
   </dialog>
 
-  <script src="./app.js"></script>
+  <script src="./app.js?v=0.5.0"></script>
 </body>
 </html>
