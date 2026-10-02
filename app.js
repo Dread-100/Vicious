@@ -1,4 +1,4 @@
-const APP_VERSION = "0.5.0";
+const APP_VERSION = "0.6.0";
 const STORAGE_KEY = "vicious.matches.v2";
 const BACKUP_KEY = "vicious.matches.backup.v2";
 const LEGACY_KEY = "vicious.datasets.v1";
@@ -88,11 +88,13 @@ function allMatches(){
 }
 function mergePayload(obj){
   if(!obj) throw new Error("データが空です");
-  if(obj.exportType==="vicious-backup"&&Array.isArray(obj.matches)) obj={schemaVersion:obj.schemaVersion||7,matches:obj.matches};
-  if(!Array.isArray(obj.matches)) throw new Error("matches配列が見つかりません");
+  if(obj.exportType==="vicious-backup"&&Array.isArray(obj.matches)) obj={schemaVersion:obj.schemaVersion||8,matches:obj.matches};
+  const incoming=Array.isArray(obj.matches)?obj.matches:[];
+  const patches=Array.isArray(obj.modePatches)?obj.modePatches:[];
+  if(!incoming.length&&!patches.length) throw new Error("matches / modePatches が見つかりません");
   const map=new Map(allMatches().map(m=>[String(m.matchId),m]));
-  let added=0,updated=0;
-  for(const raw of obj.matches.filter(Boolean)){
+  let added=0,updated=0,patched=0;
+  for(const raw of incoming.filter(Boolean)){
     const n=normalizeMatch(raw,obj),k=String(n.matchId),old=map.get(k);
     if(!old){map.set(k,n);added++;continue}
     const merged={...old,...n,
@@ -108,8 +110,17 @@ function mergePayload(obj){
     };
     map.set(k,merged);updated++;
   }
+  for(const p of patches.filter(Boolean)){
+    const mode=normalizeMode(p.mode);if(mode==="unknown")continue;
+    for(const [k,m] of map){
+      if(p.day&&m.day!==p.day)continue;
+      if(p.venue&&m.venue&&m.venue!==p.venue)continue;
+      if(String(m.modeConfidence||"").startsWith("manual"))continue;
+      if(m.mode!==mode||m.modeConfidence!==p.modeConfidence){map.set(k,{...m,mode,modeConfidence:p.modeConfidence||"batch-patch"});patched++;}
+    }
+  }
   saveMatches([...map.values()]);
-  return {added,updated,total:map.size};
+  return {added,updated,patched,total:map.size};
 }
 function importDataset(raw){
   const obj=JSON.parse(raw);
@@ -120,7 +131,7 @@ function importDataset(raw){
   }
   return mergePayload(obj);
 }
-function exportBackup(){return JSON.stringify({schemaVersion:7,exportType:"vicious-backup",exportedAt:new Date().toISOString(),matches:allMatches()})}
+function exportBackup(){return JSON.stringify({schemaVersion:8,exportType:"vicious-backup",exportedAt:new Date().toISOString(),matches:allMatches()})}
 
 function visibleMatches(){const ms=allMatches();return modeFilter==="all"?ms:ms.filter(m=>m.mode===modeFilter)}
 function splitRecent(ms,n=20){return ms.length<=n?{recent:ms,older:[]}:{recent:ms.slice(-n),older:ms.slice(0,-n)}}
@@ -226,7 +237,7 @@ $("#fixUnknownBtn").onclick=()=>{
 
 const dlg=$("#importDialog");const openImport=()=>dlg.showModal();$("#importOpen").onclick=openImport;$("#emptyImport").onclick=openImport;
 $("#pasteBtn").onclick=async()=>{try{$("#jsonInput").value=await navigator.clipboard.readText();$("#importMessage").textContent="貼り付けました。"}catch{$("#importMessage").textContent="入力欄を長押しして貼り付けてください。"}};
-$("#importBtn").onclick=()=>{try{const r=importDataset($("#jsonInput").value.trim());$("#importMessage").textContent=`追加 ${r.added}戦・更新 ${r.updated}戦・累計 ${r.total}戦`;$("#jsonInput").value="";setTimeout(()=>{dlg.close();modeFilter="all";switchTab("dashboard")},450)}catch(e){$("#importMessage").textContent="読み込み失敗: "+e.message}};
+$("#importBtn").onclick=()=>{try{const r=importDataset($("#jsonInput").value.trim());$("#importMessage").textContent=`追加 ${r.added}戦・更新 ${r.updated}戦・形式補正 ${r.patched||0}戦・累計 ${r.total}戦`;$("#jsonInput").value="";setTimeout(()=>{dlg.close();modeFilter="all";switchTab("dashboard")},450)}catch(e){$("#importMessage").textContent="読み込み失敗: "+e.message}};
 $("#exportBtn").onclick=async()=>{const s=exportBackup();try{await navigator.clipboard.writeText(s);$("#importMessage").textContent=`全${allMatches().length}戦をクリップボードにコピーしました。`}catch{$("#jsonInput").value=s;$("#importMessage").textContent="自動コピーできないため入力欄に出しました。"}};
 $("#restoreBtn").onclick=()=>{const n=migrateLegacy(true);$("#importMessage").textContent=`旧形式を再確認しました。新規復旧 ${n}戦。`;renderAll()};
 
@@ -236,7 +247,7 @@ async function handleHandoff(){
   const h=location.hash||"";if(!h)return;
   try{
     let raw=null;if(h.startsWith("#import=")){const a=await decodeBase64Url(h.slice(8));raw=new TextDecoder().decode(a)}else if(h.startsWith("#gz=")){raw=await decodeGzip(h.slice(4))}
-    if(raw!=null){const r=importDataset(raw);history.replaceState(null,"",location.pathname+location.search);modeFilter="all";switchTab("dashboard");setTimeout(()=>alert(`Vicious: ${r.added}試合追加・${r.updated}試合更新 / 累計${r.total}戦`),80);return}
+    if(raw!=null){const r=importDataset(raw);history.replaceState(null,"",location.pathname+location.search);modeFilter="all";switchTab("dashboard");setTimeout(()=>alert(`Vicious: ${r.added}試合追加・${r.updated}試合更新・形式補正${r.patched||0}戦 / 累計${r.total}戦`),80);return}
     if(h==="#sync"){history.replaceState(null,"",location.pathname+location.search);openImport();$("#importMessage").textContent="同期JSONをクリップボードから貼り付けてください。"}
   }catch(e){history.replaceState(null,"",location.pathname+location.search);openImport();$("#importMessage").textContent="直接取り込みに失敗しました: "+e.message}
 }
@@ -247,7 +258,7 @@ async function checkUpdate(){
 $("#updateBtn").onclick=async()=>{try{if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.update()))}}catch{}location.replace(location.pathname+`?v=${Date.now()}`)};
 
 migrateLegacy(false);
-if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js?v=0.5.0").then(r=>r.update()).catch(()=>{});
+if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js?v=0.6.0").then(r=>r.update()).catch(()=>{});
 switchTab("dashboard");
 handleHandoff();
 checkUpdate();
