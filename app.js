@@ -1,4 +1,4 @@
-const APP_VERSION = "0.6.0";
+const APP_VERSION = "0.6.2";
 const STORAGE_KEY = "vicious.matches.v2";
 const BACKUP_KEY = "vicious.matches.backup.v2";
 const LEGACY_KEY = "vicious.datasets.v1";
@@ -91,7 +91,8 @@ function mergePayload(obj){
   if(obj.exportType==="vicious-backup"&&Array.isArray(obj.matches)) obj={schemaVersion:obj.schemaVersion||8,matches:obj.matches};
   const incoming=Array.isArray(obj.matches)?obj.matches:[];
   const patches=Array.isArray(obj.modePatches)?obj.modePatches:[];
-  if(!incoming.length&&!patches.length) throw new Error("matches / modePatches が見つかりません");
+  const matchPatches=Array.isArray(obj.matchModePatches)?obj.matchModePatches:[];
+  if(!incoming.length&&!patches.length&&!matchPatches.length) throw new Error("matches / mode patches が見つかりません");
   const map=new Map(allMatches().map(m=>[String(m.matchId),m]));
   let added=0,updated=0,patched=0;
   for(const raw of incoming.filter(Boolean)){
@@ -115,9 +116,15 @@ function mergePayload(obj){
     for(const [k,m] of map){
       if(p.day&&m.day!==p.day)continue;
       if(p.venue&&m.venue&&m.venue!==p.venue)continue;
-      if(String(m.modeConfidence||"").startsWith("manual"))continue;
+      if(String(m.modeConfidence||"").startsWith("manual-match"))continue;
       if(m.mode!==mode||m.modeConfidence!==p.modeConfidence){map.set(k,{...m,mode,modeConfidence:p.modeConfidence||"batch-patch"});patched++;}
     }
+  }
+  for(const p of matchPatches.filter(Boolean)){
+    const k=String(p.matchId||""),m=map.get(k),mode=normalizeMode(p.mode);
+    if(!m||mode==="unknown")continue;
+    const confidence=p.modeConfidence||"class-icon";
+    if(m.mode!==mode||m.modeConfidence!==confidence){map.set(k,{...m,mode,modeConfidence:confidence});patched++;}
   }
   saveMatches([...map.values()]);
   return {added,updated,patched,total:map.size};
@@ -258,7 +265,7 @@ async function checkUpdate(){
 $("#updateBtn").onclick=async()=>{try{if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.update()))}}catch{}location.replace(location.pathname+`?v=${Date.now()}`)};
 
 migrateLegacy(false);
-if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js?v=0.6.0").then(r=>r.update()).catch(()=>{});
+if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js?v=0.6.2").then(r=>r.update()).catch(()=>{});
 switchTab("dashboard");
 handleHandoff();
 checkUpdate();

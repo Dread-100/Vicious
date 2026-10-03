@@ -1,6 +1,6 @@
 (async()=>{
 'use strict';
-const APP='https://dread-100.github.io/Vicious/',KNOWN_KEY='vicious.bookmarklet.known.v2',MODEMAP_KEY='vicious.bookmarklet.modemap.v1';
+const APP='https://dread-100.github.io/Vicious/',KNOWN_KEY='vicious.bookmarklet.known.v2';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms)),text=e=>(e?.textContent||'').replace(/\s+/g,' ').trim(),num=s=>{const m=String(s||'').replace(/,/g,'').match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):null},sec=(a,b,c)=>Number(a)*60+Number(b)+Number(c)/100;
 const load=(k,f)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(f))}catch{return f}},save=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}};
 const machineKey=s=>{const m=String(s||'').match(/\/images\/([0-9a-f]{24,})\.(?:png|jpe?g|webp)/i);return m?m[1]:null};
@@ -13,41 +13,92 @@ const dayLinksFrom=(d,u)=>{const out=new Map();for(const a of d.querySelectorAll
 let dayUrls=[];
 if(location.pathname.includes('/results/classmatch/fight/daily_detail')){const x=new URL(location.href);x.searchParams.delete('page');dayUrls=[x.href]}else dayUrls=dayLinksFrom(document,location.href);
 if(!dayUrls.length){alert('各日付を選ぶ戦績画面、または日別戦績一覧でVicious同期を実行してください。');return}
-const overlay=document.createElement('div');overlay.id='vicious-sync-overlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(7,10,15,.97);color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px;box-sizing:border-box;overflow:auto';overlay.innerHTML=`<div style="max-width:560px;margin:7vh auto 0"><div style="font-size:12px;letter-spacing:.16em;color:#8ea0b5">VICIOUS SYNC v0.6</div><div style="font-size:28px;font-weight:850;margin:5px 0 12px">まとめて同期</div><div id="vs-status" style="font-size:15px;line-height:1.65;color:#d7dee8">準備中…</div><div style="height:9px;background:#202733;border-radius:99px;overflow:hidden;margin-top:18px"><div id="vs-bar" style="height:100%;width:2%;background:#fff;transition:width .18s"></div></div><div id="vs-result" style="margin-top:22px"></div><div id="vs-actions" style="display:flex;gap:10px;margin-top:18px"></div></div>`;document.body.appendChild(overlay);
+const overlay=document.createElement('div');overlay.id='vicious-sync-overlay';overlay.style.cssText='position:fixed;inset:0;z-index:2147483647;background:rgba(7,10,15,.97);color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:22px;box-sizing:border-box;overflow:auto';overlay.innerHTML=`<div style="max-width:560px;margin:7vh auto 0"><div style="font-size:12px;letter-spacing:.16em;color:#8ea0b5">VICIOUS SYNC v0.6.2</div><div style="font-size:28px;font-weight:850;margin:5px 0 12px">まとめて同期</div><div id="vs-status" style="font-size:15px;line-height:1.65;color:#d7dee8">準備中…</div><div style="height:9px;background:#202733;border-radius:99px;overflow:hidden;margin-top:18px"><div id="vs-bar" style="height:100%;width:2%;background:#fff;transition:width .18s"></div></div><div id="vs-result" style="margin-top:22px"></div><div id="vs-actions" style="display:flex;gap:10px;margin-top:18px"></div></div>`;document.body.appendChild(overlay);
 const status=overlay.querySelector('#vs-status'),bar=overlay.querySelector('#vs-bar'),result=overlay.querySelector('#vs-result'),actions=overlay.querySelector('#vs-actions');
 const setStatus=(s,p)=>{status.textContent=s;if(p!=null)bar.style.width=Math.max(2,Math.min(100,p))+'%'};
 const button=(label,primary,fn)=>{const b=document.createElement('button');b.textContent=label;b.style.cssText=`flex:1;padding:14px 12px;border-radius:12px;border:${primary?'0':'1px solid #536070'};font-size:16px;font-weight:750;background:${primary?'#fff':'transparent'};color:${primary?'#0a0e14':'#fff'}`;b.onclick=fn;actions.appendChild(b);return b};
 const fetchDoc=async u=>{const r=await fetch(u,{credentials:'include',cache:'no-store'});if(!r.ok)throw new Error('HTTP '+r.status);const h=await r.text(),d=new DOMParser().parseFromString(h,'text/html');if(/login/i.test(r.url))throw new Error('ログイン状態を確認してください');return[h,d]};
-const detectMode=(d,u)=>{const pick=t=>/ソロ出撃|ソロ|シャッフル/i.test(t)?'shuffle':/チーム出撃|チーム|固定/i.test(t)?'fixed':null;for(const e of d.querySelectorAll('.active,.selected,.current,.is-active,[aria-current="page"],[aria-selected="true"],input:checked,option:checked,option[selected]')){const p=pick(text(e)||text(e.closest('label')));if(p)return{mode:p,confidence:'active-label'}}const cur=new URL(u),param=cur.searchParams.get('param');if(param!=null){for(const a of d.querySelectorAll('a[href]')){const p=pick(text(a));if(!p)continue;try{const x=new URL(a.getAttribute('href'),u);if(x.searchParams.get('param')===param)return{mode:p,confidence:'param-tab'}}catch{}}}for(const e of d.querySelectorAll('h1,h2,h3,.title,.heading,.tab,.tabs,nav')){const p=pick(text(e));if(p)return{mode:p,confidence:'heading'}}return{mode:'unknown',confidence:'unknown'}};
-const daily=(d,u)=>{const box=[...d.querySelectorAll('.content > .box')][0]||d,day=text(box.querySelector('h3 .datetime'))||text(d.querySelector('h3 .datetime')),venue=text(box.querySelector('h3 .col-stand'))||text(d.querySelector('h3 .col-stand')),rows=[];for(const a of d.querySelectorAll('a.vs-detail[href*="match_detail"]')){const href=new URL(a.getAttribute('href'),u).href,x=new URL(href),ts=x.searchParams.get('ts');if(!ts)continue;let n=text(a.querySelector('p.fz-xs.fw-b'));if(/^\d+WINS$/i.test(n))n='';rows.push({href,ts,time:text(a.querySelector('.datetime')),result:a.classList.contains('win')?'win':a.classList.contains('lose')?'lose':null,name:n})}const pages=[...d.querySelectorAll('.page-send a[href*="daily_detail"]')].map(a=>new URL(a.getAttribute('href'),u).href);return{day,venue,rows,pages}};
+const modeWord=s=>{s=String(s||'').toLowerCase();if(/shuffle|solo|single|1p|one.?person|ソロ|シャッフル/.test(s))return'shuffle';if(/fixed|team|duo|pair|2p|two.?person|チーム|固定/.test(s))return'fixed';return null};
+const assetSizeCache=new Map();
+const imageSize=async(src,u)=>{try{const url=new URL(src,u).href;if(assetSizeCache.has(url))return assetSizeCache.get(url);const p=new Promise(resolve=>{const im=new Image();im.onload=()=>resolve({w:im.naturalWidth||0,h:im.naturalHeight||0,url});im.onerror=()=>resolve(null);im.src=url});assetSizeCache.set(url,p);return await p}catch{return null}};
+const rowMode=async(a,u)=>{
+  const direct=modeWord([a.className,a.id,a.getAttribute('data-mode'),a.getAttribute('data-type'),a.getAttribute('aria-label')].join(' '));if(direct)return{mode:direct,confidence:'row-attr'};
+  const candidates=[...a.querySelectorAll('*')].filter(e=>{const t=text(e);return t==='クラス'||(t.includes('クラス')&&t.length<=12)}).sort((x,y)=>text(x).length-text(y).length);
+  const label=candidates[0]||null,zones=[];
+  if(label){let e=label;for(let i=0;i<4&&e&&e!==a;i++,e=e.parentElement)zones.push(e)}
+  zones.push(a);
+  const seen=new Set(),assets=[];
+  for(const z of zones){
+    const kw=modeWord([z.className,z.id,z.getAttribute?.('data-mode'),z.getAttribute?.('data-type'),z.getAttribute?.('aria-label')].join(' '));if(kw)return{mode:kw,confidence:'class-badge-attr'};
+    for(const im of z.querySelectorAll?.('img')||[]){
+      if(seen.has(im))continue;seen.add(im);
+      const meta=[im.className,im.id,im.alt,im.title,im.getAttribute('src'),im.getAttribute('data-original')].join(' ');
+      const m=modeWord(meta);if(m)return{mode:m,confidence:'class-icon-name'};
+      if(/item-icon-img|machine|ms[-_]?icon/i.test(meta))continue;
+      const src=im.getAttribute('data-original')||im.getAttribute('src')||'';
+      if(src)assets.push({src,w:Number(im.getAttribute('width'))||0,h:Number(im.getAttribute('height'))||0});
+    }
+    for(const e of z.querySelectorAll?.('[style*="background"]')||[]){
+      const meta=[e.className,e.id,e.getAttribute('style')].join(' '),m=modeWord(meta);if(m)return{mode:m,confidence:'class-bg-name'};
+      const mm=meta.match(/url\((['"]?)(.*?)\1\)/i);if(mm?.[2])assets.push({src:mm[2],w:0,h:0});
+    }
+    if(assets.length)break;
+  }
+  for(const x of assets){
+    let w=x.w,h=x.h;
+    if(!w||!h){const s=await imageSize(x.src,u);w=s?.w||0;h=s?.h||0}
+    if(w&&h){
+      const ratio=w/h;
+      if(ratio>=1.28)return{mode:'fixed',confidence:'class-icon-ratio'};
+      if(ratio>0&&ratio<1.28)return{mode:'shuffle',confidence:'class-icon-ratio'};
+    }
+  }
+  return{mode:'unknown',confidence:'class-icon-unknown'};
+};
+const daily=async(d,u)=>{const box=[...d.querySelectorAll('.content > .box')][0]||d,day=text(box.querySelector('h3 .datetime'))||text(d.querySelector('h3 .datetime')),venue=text(box.querySelector('h3 .col-stand'))||text(d.querySelector('h3 .col-stand')),rows=[];for(const a of d.querySelectorAll('a.vs-detail[href*="match_detail"]')){const href=new URL(a.getAttribute('href'),u).href,x=new URL(href),ts=x.searchParams.get('ts');if(!ts)continue;let n=text(a.querySelector('p.fz-xs.fw-b'));if(/^\d+WINS$/i.test(n))n='';const mi=await rowMode(a,u);rows.push({href,ts,time:text(a.querySelector('.datetime')),result:a.classList.contains('win')?'win':a.classList.contains('lose')?'lose':null,name:n,mode:mi.mode,modeConfidence:mi.confidence})}const pages=[...d.querySelectorAll('.page-send a[href*="daily_detail"]')].map(a=>new URL(a.getAttribute('href'),u).href);return{day,venue,rows,pages}};
 const score=li=>{const o={};for(const dl of li.querySelectorAll('dl')){const k=text(dl.querySelector('dt')).replace(/\s+/g,''),v=num(text(dl.querySelector('dd')));if(k.includes('スコア'))o.score=v;else if(k==='撃墜')o.kills=v;else if(k==='被撃墜')o.deaths=v;else if(k.includes('EXバーストダメージ'))o.burstDamage=v;else if(k.includes('与ダメージ'))o.damageDealt=v;else if(k.includes('被ダメージ'))o.damageTaken=v}const c=[...li.classList].find(x=>/^rank-band\d+$/.test(x));o.rank=c?Number(c.replace('rank-band','')):null;return o};
 const timeline=h=>{const d=new DOMParser().parseFromString(h,'text/html'),s=[...d.scripts].map(x=>x.textContent||'').find(x=>x.includes('var dataset')&&x.includes('vis.DataSet'))||'',out=[],re=/var start_time = new Date\(0,\s*0,\s*0,\s*(\d+),\s*(\d+),\s*(\d+)\);\s*(?:var end_time = new Date\(0,\s*0,\s*0,\s*(\d+),\s*(\d+),\s*(\d+)\);\s*)?dataset\.push\(\{\s*id:\s*\d+,\s*group:\s*["']([^"']+)["'],\s*start:\s*start_time(?:,\s*end:\s*end_time)?(?:,\s*className:\s*["']([^"']+)["'])?(?:,\s*type:\s*["']([^"']+)["'])?\s*\}\);/g;let m;while((m=re.exec(s)))out.push({g:m[7],a:sec(m[1],m[2],m[3]),b:m[4]!=null?sec(m[4],m[5],m[6]):null,c:m[8]||null,t:m[9]||null});return out};
 const parseDetail=(h,d,meta)=>{const names=[...d.querySelectorAll('#panel1 .name')].map(text).filter(Boolean);let i=meta.name?names.indexOf(meta.name):-1;if(i<0)i=0;const imgs=[...d.querySelectorAll('#panel1 img.item-icon-img')].map(img=>img.getAttribute('data-original')||img.getAttribute('src')||''),keys=imgs.map(machineKey),rows=[...d.querySelectorAll('#panel3 li.item')].map(score),self={...(rows[i]||{}),machineKey:keys[i]||null},groups=['team1-1','team1-2','team2-1','team2-2'],selfGroup=groups[i],allyIndex=i<2?(i===0?1:0):(i===2?3:2),allyGroup=groups[allyIndex],enemyGroups=i<2?groups.slice(2):groups.slice(0,2),allEv=timeline(h),ev=allEv.filter(x=>x.g===selfGroup),de=ev.filter(x=>x.t==='point').map(x=>x.a),allyDe=allEv.filter(x=>x.g===allyGroup&&x.t==='point').map(x=>x.a),enemyDe=allEv.filter(x=>enemyGroups.includes(x.g)&&x.t==='point').map(x=>x.a),bu=ev.filter(x=>/^exbst-(f|s|e)$/.test(x.c||'')),rd=ev.filter(x=>x.c==='ex'),fd=de[0]??null,fb=bu[0]?.a??null,held=de.filter(x=>rd.some(y=>y.a<=x&&(y.b==null||x<=y.b+.001))),allyBefore=fd==null?0:allyDe.filter(x=>x<fd).length,lateRoute=fd!=null&&allyBefore>=2,postDeathBurst=fd!=null?bu.some(x=>x.a>fd):false;return{selfName:meta.name||names[i]||null,self,deathsSec:de,allyDeathsSec:allyDe,enemyDeathsSec:enemyDe,machineKeys:keys,selfIndex:i,burst:{count:bu.length,types:bu.map(x=>x.c.slice(-1).toUpperCase()),activationsSec:bu.map(x=>x.a),firstBeforeDeath:fb!=null&&(fd==null||fb<fd),heldDeathCount:held.length},route:{known:true,allyDeathsBeforeFirstSelfDeath:fd==null?null:allyBefore,lateRoute:fd==null?null:lateRoute,postDeathBurst:fd==null?null:postDeathBurst}}};
 try{
-const known=load(KNOWN_KEY,{}),modeMap=load(MODEMAP_KEY,{}),matches=[],failed=[],patches=[];let inspected=0,totalCandidates=0;
+const known=load(KNOWN_KEY,{}),matches=[],failed=[],matchModePatches=[];let inspected=0,totalCandidates=0;
 for(let di=0;di<dayUrls.length;di++){
   const dayUrl=dayUrls[di],root=new URL(dayUrl);root.searchParams.delete('page');setStatus(`日付を確認中… ${di+1}/${dayUrls.length}`,4+26*(di/dayUrls.length));
-  const queue=[root.href],seen=new Set(),byId=new Map();let day='',venue='',modeInfo={mode:'unknown',confidence:'unknown'};
-  while(queue.length){const u=queue.shift();if(seen.has(u))continue;seen.add(u);const[h,d]=await fetchDoc(u),p=daily(d,u);day=day||p.day;venue=venue||p.venue;if(modeInfo.mode==='unknown')modeInfo=detectMode(d,u);p.rows.forEach(r=>byId.set(r.ts,r));p.pages.forEach(x=>{const y=new URL(x);if(y.searchParams.get('ts')===root.searchParams.get('ts')&&!seen.has(y.href))queue.push(y.href)});await sleep(70)}
-  if(!byId.size)continue;inspected++;
-  const modeToken=root.searchParams.get('param')||root.searchParams.get('mode')||'';
-  if(modeInfo.mode==='unknown'&&modeToken&&modeMap[modeToken])modeInfo={mode:modeMap[modeToken],confidence:'learned-param'};
-  if(modeInfo.mode==='unknown'){
-    setStatus(`出撃形式を確認: ${day||`${di+1}日目`}`,30);result.innerHTML=`<div style="font-size:18px;font-weight:800">${day||'この日'} はどっち？</div><div style="margin-top:7px;color:#b9c4d1">同じ識別値は次回から自動判定します。</div>`;
-    modeInfo=await new Promise(resolve=>{actions.innerHTML='';button('シャッフル',false,()=>resolve({mode:'shuffle',confidence:'manual-learned'}));button('固定',true,()=>resolve({mode:'fixed',confidence:'manual-learned'}))});actions.innerHTML='';result.innerHTML='';if(modeToken){modeMap[modeToken]=modeInfo.mode;save(MODEMAP_KEY,modeMap)}
+  const queue=[root.href],seen=new Set(),byId=new Map();let day='',venue='';
+  while(queue.length){
+    const u=queue.shift();if(seen.has(u))continue;seen.add(u);
+    const[h,d]=await fetchDoc(u),p=await daily(d,u);day=day||p.day;venue=venue||p.venue;
+    p.rows.forEach(r=>byId.set(r.ts,r));
+    p.pages.forEach(x=>{const y=new URL(x);if(y.searchParams.get('ts')===root.searchParams.get('ts')&&!seen.has(y.href))queue.push(y.href)});
+    await sleep(70)
   }
-  patches.push({day,venue,mode:modeInfo.mode,modeConfidence:modeInfo.confidence});
-  const key=(root.searchParams.get('ts')||day)+'|'+(root.searchParams.get('param')||'')+'|'+venue+'|'+modeInfo.mode,done=new Set(known[key]||[]),fresh=[...byId.values()].filter(x=>!done.has(String(x.ts)));totalCandidates+=fresh.length;
+  if(!byId.size)continue;inspected++;
+
+  for(const r of byId.values()){
+    if(r.mode!=='unknown')matchModePatches.push({matchId:String(r.ts),mode:r.mode,modeConfidence:r.modeConfidence||'class-icon'});
+  }
+
+  const key=(root.searchParams.get('ts')||day)+'|'+(root.searchParams.get('param')||'')+'|'+venue;
+  const done=new Set(known[key]||[]);
+  for(const [k,v] of Object.entries(known)){
+    if(k.startsWith(key+'|')&&Array.isArray(v))for(const id of v)done.add(String(id));
+  }
+  const fresh=[...byId.values()].filter(x=>!done.has(String(x.ts)));totalCandidates+=fresh.length;
+
   for(let i=0;i<fresh.length;i++){
-    const m=fresh[i],base=30+60*((di+(i+1)/Math.max(1,fresh.length))/dayUrls.length);setStatus(`${day||'日付'}：新規試合 ${i+1}/${fresh.length}　全体 +${matches.length}`,base);
-    try{const[h,d]=await fetchDoc(m.href),detail=parseDetail(h,d,m);matches.push({matchId:String(m.ts),matchTs:Number(m.ts),day,venue,time:m.time,result:m.result,mode:modeInfo.mode,modeConfidence:modeInfo.confidence,...detail});done.add(String(m.ts))}catch(e){failed.push({ts:m.ts,day,error:String(e.message||e)})}
+    const m=fresh[i],base=30+60*((di+(i+1)/Math.max(1,fresh.length))/dayUrls.length);
+    setStatus(`${day||'日付'}：新規試合 ${i+1}/${fresh.length}　全体 +${matches.length}`,base);
+    try{
+      const[h,d]=await fetchDoc(m.href),detail=parseDetail(h,d,m);
+      matches.push({matchId:String(m.ts),matchTs:Number(m.ts),day,venue,time:m.time,result:m.result,mode:m.mode,modeConfidence:m.modeConfidence,...detail});
+      done.add(String(m.ts))
+    }catch(e){failed.push({ts:m.ts,day,error:String(e.message||e)})}
     await sleep(110)
   }
   known[key]=[...done].slice(-1800);save(KNOWN_KEY,known)
 }
-save(MODEMAP_KEY,modeMap);
-const wins=matches.filter(x=>x.result==='win').length,payload={schemaVersion:8,source:'GUNDAM VS. MOBILE / EXVS2IB',incremental:true,batch:true,daysInspected:inspected,modePatches:patches,matches},json=JSON.stringify(payload);
+const dedupPatches=[...new Map(matchModePatches.map(p=>[String(p.matchId),p])).values()];
+const wins=matches.filter(x=>x.result==='win').length,payload={schemaVersion:9,source:'GUNDAM VS. MOBILE / EXVS2IB',incremental:true,batch:true,daysInspected:inspected,matchModePatches:dedupPatches,matches},json=JSON.stringify(payload);
 let handoff=null;try{const gz=await gzipText(json);if(gz&&gz.length<60000)handoff=APP+'#gz='+gz}catch{}if(!handoff){const enc=encodeText(json);if(enc.length<28000)handoff=APP+'#import='+enc}
-setStatus('同期完了',100);result.innerHTML=`<div style="font-size:28px;font-weight:850">+${matches.length}試合</div><div style="margin-top:7px;color:#b9c4d1">${inspected}日分を確認 ・ ${wins}勝 ${matches.length-wins}敗<br>出撃形式の補正 ${patches.length}日分${failed.length?` ・ 取得失敗 ${failed.length}試合（次回再試行）`:''}</div>`;button('閉じる',false,()=>overlay.remove());button(matches.length||patches.length?'Viciousへ送る':'Viciousを開く',true,async()=>{if(matches.length||patches.length){if(handoff){location.assign(handoff);return}await copy(json);location.assign(APP+'#sync')}else location.assign(APP)})
+setStatus('同期完了',100);result.innerHTML=`<div style="font-size:28px;font-weight:850">+${matches.length}試合</div><div style="margin-top:7px;color:#b9c4d1">${inspected}日分を確認 ・ ${wins}勝 ${matches.length-wins}敗<br>出撃形式 ${dedupPatches.length}試合を試合単位で判定${failed.length?` ・ 取得失敗 ${failed.length}試合（次回再試行）`:''}</div>`;button('閉じる',false,()=>overlay.remove());button(matches.length||dedupPatches.length?'Viciousへ送る':'Viciousを開く',true,async()=>{if(matches.length||dedupPatches.length){if(handoff){location.assign(handoff);return}await copy(json);location.assign(APP+'#sync')}else location.assign(APP)})
 }catch(e){setStatus('エラー',100);result.innerHTML=`<div style="font-size:18px;font-weight:750;color:#ffb7b7">${String(e.message||e)}</div><div style="margin-top:8px;color:#b9c4d1">ページを再読み込みして、もう一度実行してください。</div>`;button('閉じる',true,()=>overlay.remove())}
 })();
